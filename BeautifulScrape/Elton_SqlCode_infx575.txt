@@ -1,0 +1,38 @@
+mysql> CREATE TABLE faculty_elton LIKE faculty;
+
+
+
+-----------------------------------------------------------------------------------------
+Elton
+
+mysql> CREATE TABLE faculty_elton LIKE faculty;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> desc faculty_elton
+    -> ;
++------------------+--------------+------+-----+---------+-------+
+| Field            | Type         | Null | Key | Default | Extra |
++------------------+--------------+------+-----+---------+-------+
+| firstname        | varchar(100) | YES  |     | NULL    |       |
+| lastname         | varchar(100) | YES  |     | NULL    |       |
+| university       | varchar(200) | YES  |     | NULL    |       |
+| department       | varchar(200) | YES  |     | NULL    |       |
+| grad_school      | varchar(200) | YES  |     | NULL    |       |
+| grad_school_dept | varchar(200) | YES  |     | NULL    |       |
+| title            | varchar(100) | YES  |     | NULL    |       |
+| university_code  | smallint(6)  | YES  |     | NULL    |       |
+| grad_school_code | smallint(6)  | YES  |     | NULL    |       |
+| highest_degree   | varchar(50)  | YES  |     | NULL    |       |
+| student          | varchar(100) | YES  |     | NULL    |       |
+| Grad_Yr          | varchar(100) | YES  |     | NULL    |       |
++------------------+--------------+------+-----+---------+-------+
+12 rows in set (0.00 sec)
+
+mysql> select * from faculty_elton
+    -> ;
+Empty set (0.00 sec)
+
+mysql> LOAD DATA INFILE '/home/ubuntu/Elton_Assign1_infx575.csv' INTO TABLE faculty_elton FIELDS TERMINATED BY ',' LINES TERMINATED BY '\r' IGNORE 1 LINES
+    -> ;
+Query OK, 221 rows affected, 805 warnings (0.01 sec)
+Records: 221  Deleted: 0  Skipped: 0  Warnings: 805

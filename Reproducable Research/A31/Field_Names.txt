@@ -1,0 +1,10 @@
+1,Ecology and Evolution
+2,Molecular and Cell Biology
+3,Economics
+4,Sociology
+5,Probability and Statistics
+6,Organizational and marketing
+7,Law
+8,Anthropology
+9,Political Science
+10,Education

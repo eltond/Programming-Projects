@@ -1,0 +1,1 @@
+Data.gov is a rich resource for civic hackers, tech entrepreneurs, data scientists, and developers of all stripes. Here you will find information about APIs, open source projects, and relevant developer resources across government. You will also find updates on the data.gov infrastructure itself, an open source project managed on GitHub.
