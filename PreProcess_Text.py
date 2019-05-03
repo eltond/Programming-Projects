@@ -24,7 +24,7 @@ wnsynsets = []
 row_flag = []
 
 startTime = datetime.now()
-connection_string="Driver={ODBC Driver 17 for SQL Server};Server=MRICZDADSAPD005,14330;Database=TextAnalytics;Trusted_Connection=Yes"
+connection_string="Driver={ODBC Driver 17 for SQL Server};Server=,14330;Database=;Trusted_Connection=Yes"
 query="""select top 108000 a.transcriptComponentId,   a.componenttext
 from dbo.FactEarningsText a
 
@@ -42,8 +42,8 @@ df = rx_data_step(ds)
 dfToList = df['componenttext'].tolist()
     
 #conn = pyodbc.connect('driver={ODBC Driver 11 for SQL Server};'
-#                      'server=MRICZDADSAPD005;'
-#                      'database=TextAnalytics;'
+#                      'server=;'
+#                      'database=;'
 #                      'Trusted_Connection=yes;')
 
 #sql = "select top 1000 * from dbo.FactEarningsText a"
@@ -73,11 +73,6 @@ class CustomVectorizer(CountVectorizer):
     # overwrite the build_analyzer method, allowing one to
     # create a custom analyzer for the vectorizer
     def build_analyzer(self):
-        
-        # load stop words using CountVectorizer's built in method
-        stop_words = self.get_stop_words()
-        preprocess = self.build_preprocessor()
-        Tokenize = self.build_tokenizer()
         # create the analyzer that will be returned by this method
         def analyser(doc):
             expand_tokens = []
@@ -85,11 +80,11 @@ class CustomVectorizer(CountVectorizer):
             synsets = []
             # apply the preprocessing and tokenzation steps
             sent_text = nltk.sent_tokenize(doc)
-            doc_clean = preprocess(doc)
-            tokens = Tokenize(doc_clean)
+            doc_clean = self.build_preprocessor()(doc)
+            tokens = self.build_tokenizer()(doc_clean)
             # use CountVectorizer's _word_ngrams built in method
             # to remove stop words and extract n-grams        
-            n_grams = list(set(self._word_ngrams(tokens,stop_words)))
+            n_grams = list(set(self._word_ngrams(tokens,self.get_stop_words())))
             for x in n_grams:
                 my_regex = r"\b(?=\w)" + re.escape(x) + r"\b(?!\w)"
                 matched_sent = [s for s in sent_text if len(re.findall(my_regex, s, re.IGNORECASE)) > 0]
@@ -106,7 +101,7 @@ class CustomVectorizer(CountVectorizer):
             return(synsets)
         return(analyser)
 
-custom_vec = CustomVectorizer(ngram_range=(1,3),min_df=0.05,stop_words=stpwords)
+custom_vec = CustomVectorizer(ngram_range=(1,3),min_df=0.05,max_df=0.8,stop_words=stpwords)
 
 custom_vec.fit(dfToList)
 
@@ -130,6 +125,4 @@ DimVocabFinal = pd.DataFrame({'Synsets': wnsynsets,'Hypernym Path':hyprnympaths,
 dsout = RxSqlServerData(table = "UtilVocabularyNew", connection_string = connection_string,rows_per_read=10000)
 rx_data_step(DimVocabFinal,dsout,overwrite=True)
 
-
 print(datetime.now() - startTime)
-
