@@ -19,10 +19,6 @@ stpwords.extend(newStopWords)
 
 translator = str.maketrans('','', string.punctuation)
 
-hyprnympaths = []
-wnsynsets = []
-row_flag = []
-
 startTime = datetime.now()
 connection_string="Driver={ODBC Driver 17 for SQL Server};Server=,14330;Database=;Trusted_Connection=Yes"
 query="""select top 108000 a.transcriptComponentId,   a.componenttext
@@ -59,8 +55,8 @@ class CustomVectorizer(CountVectorizer):
                 text = f.lower()
                 text_contraction = cont.fix(text)
                 text_punc = text_contraction.translate(translator)
-                text_clean = ' '.join([word for word in text_punc.split() if(len(word.lower())>1)])
-                text_sent = ' '.join([i for i in text_clean.split() if(i.isalnum() and not i.isdigit())])
+                text_clean = " ".join([word for word in text_punc.split() if(len(word.lower())>1)])
+                text_sent = " ".join([i for i in text_clean.split() if(i.isalnum() and not i.isdigit())])
                 return text_sent
         return (Text_Cleanup)   
         
@@ -79,8 +75,8 @@ class CustomVectorizer(CountVectorizer):
             expand_Lemms = []
             synsets = []
             # apply the preprocessing and tokenzation steps
-            sent_text = nltk.sent_tokenize(doc)
             doc_clean = self.build_preprocessor()(doc)
+            sent_text = nltk.sent_tokenize(doc_clean)
             tokens = self.build_tokenizer()(doc_clean)
             # use CountVectorizer's _word_ngrams built in method
             # to remove stop words and extract n-grams        
@@ -101,7 +97,7 @@ class CustomVectorizer(CountVectorizer):
             return(synsets)
         return(analyser)
 
-custom_vec = CustomVectorizer(ngram_range=(1,3),min_df=0.05,max_df=0.8,stop_words=stpwords)
+custom_vec = CustomVectorizer(ngram_range=(1,3),min_df=3,stop_words=stpwords)
 
 custom_vec.fit(dfToList)
 
@@ -109,20 +105,42 @@ v1 = custom_vec.vocabulary_
 Vocab =  pd.DataFrame.from_dict(v1,orient = "index")
 DimVocab = Vocab.reset_index().rename(columns = {0:"VocabKey","index":"Synset"})
 
+hyprnympaths = []
+wnsynsets = []
+row_flag = []
+vocabkey = []
+defn = []
+
 for i in range(0, len(DimVocab)):
     try:
         syn = wn.synset(DimVocab.iloc[i]['Synset'])
         for paths in syn.hypernym_paths():
-            wnsynsets.append(syn)
-            hyprnympaths.append(paths)
+            wnsynsets.append(DimVocab.iloc[i]['Synset'])
+            vocabkey.append(DimVocab.iloc[i]['VocabKey'])
+            defn.append(str(syn.definition()))
+            hyprnympaths.append("<-".join(str(x)[8:-2] for x in paths))
             row_flag.append("Synset")
     except:
         wnsynsets.append(DimVocab.iloc[i]['Synset'])
+        vocabkey.append(DimVocab.iloc[i]['VocabKey'])
+        defn.append("No Definition")
         hyprnympaths.append("No Hypernym Path")
         row_flag.append("n-grams")
-DimVocabFinal = pd.DataFrame({'Synsets': wnsynsets,'Hypernym Path':hyprnympaths, 'Keyword Flag':row_flag})
 
-dsout = RxSqlServerData(table = "UtilVocabularyNew", connection_string = connection_string,rows_per_read=10000)
-rx_data_step(DimVocabFinal,dsout,overwrite=True)
+StageVocabulary = pd.DataFrame({'Vocabkey':vocabkey,'Synset_OR_Word': wnsynsets,'Keyword_Flag':row_flag})
+StageSynset = pd.DataFrame({'Vocabkey':vocabkey,'Hypernym_Path':hyprnympaths, 'Definition': defn})
+
+StageVocabularyFiltered = StageVocabulary.loc[StageVocabulary['Keyword_Flag'] == 'Synset']
+StageSynsetFinal = pd.merge(StageVocabularyFiltered, StageSynset, how='inner', on='Vocabkey')
+
+StageVocabulary.drop_duplicates(inplace=True)
+StageSynsetFinal.drop_duplicates(inplace=True)
+
+dsout = RxSqlServerData(table = "StageVocabulary", connection_string = connection_string,rows_per_read=10000)
+rx_data_step(StageVocabulary,dsout,overwrite=True)
+
+dsout = RxSqlServerData(table = "StageSynset", connection_string = connection_string,rows_per_read=10000)
+rx_data_step(StageSynsetFinal,dsout,overwrite=True)
+
 
 print(datetime.now() - startTime)
