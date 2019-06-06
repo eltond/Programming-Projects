@@ -12,16 +12,18 @@ from nltk.corpus import wordnet as wn
 from nltk.wsd import lesk
 from sklearn.feature_extraction.text import CountVectorizer
 from revoscalepy import RxSqlServerData, rx_data_step
+#from sqlalchemy import create_engine
+#import urllib
 
 stpwords = nltk.corpus.stopwords.words("english")
 newStopWords = ["quarter","yes","billion","million","get","q","us","you","we"]
 stpwords.extend(newStopWords)
-
 translator = str.maketrans('','', string.punctuation)
 
+
 startTime = datetime.now()
-connection_string="Driver={ODBC Driver 17 for SQL Server};Server=,14330;Database=;Trusted_Connection=Yes"
-query="""select top 108000 a.transcriptComponentId,   a.componenttext
+connection_string="Driver={ODBC Driver 17 for SQL Server};Server=MRICZDADSAPD005,14330;Database=TextAnalytics;Trusted_Connection=Yes"
+query="""select top 300000 a.transcriptComponentId,   a.componenttext
 from dbo.FactEarningsText a
 
 join dbo.FactEarningsCall b
@@ -38,11 +40,11 @@ df = rx_data_step(ds)
 dfToList = df['componenttext'].tolist()
     
 #conn = pyodbc.connect('driver={ODBC Driver 11 for SQL Server};'
-#                      'server=;'
-#                      'database=;'
-#                      'Trusted_Connection=yes;')
+#                      'server=MRICZDADSAPD005;'
+ #                     'database=TextAnalytics;'
+ #                     'Trusted_Connection=yes;')
 
-#sql = "select top 1000 * from dbo.FactEarningsText a"
+#sql = "select top 108000 * from dbo.FactEarningsText a"
     
 #data = pd.read_sql(sql,conn)
 #dfToList = data['componenttext'].tolist()
@@ -91,9 +93,10 @@ class CustomVectorizer(CountVectorizer):
                 for row_len in range(0, len(Expanded_Token_Lemmd.iloc[i]['Sentences'])):
                     x = lesk(Expanded_Token_Lemmd.iloc[i]['Sentences'][row_len],Expanded_Token_Lemmd.iloc[i]['Word'].lower().replace(' ','_'))
                     if not x:
-                        synsets.append(Expanded_Token_Lemmd.iloc[i]['Word'].lower())
+                        synsets.append('('+"n,"+str(Expanded_Token_Lemmd.iloc[i]['Word'].lower())+','+str(Expanded_Token_Lemmd.iloc[i]['Word'].lower())+')')
                     else:
-                        synsets.append(str(x)[8:-2])
+                        synsets.append('('+"s,"+str(x)[8:-2]+','+str(Expanded_Token_Lemmd.iloc[i]['Word'].lower())+')')
+                        
             return(synsets)
         return(analyser)
 
@@ -110,22 +113,30 @@ wnsynsets = []
 row_flag = []
 vocabkey = []
 defn = []
+ngrams = []
+originalword = []
+originalsynsets = []
 
 for i in range(0, len(DimVocab)):
-    try:
-        syn = wn.synset(DimVocab.iloc[i]['Synset'])
-        for paths in syn.hypernym_paths():
-            wnsynsets.append(DimVocab.iloc[i]['Synset'])
+    if "(s," in DimVocab.iloc[i]['Synset']:
+       syn = wn.synset(DimVocab.iloc[i]['Synset'][DimVocab.iloc[i]['Synset'].index(',')+1:DimVocab.iloc[i]['Synset'].rindex(',')])
+       for paths in syn.hypernym_paths():
+            wnsynsets.append(DimVocab.iloc[i]['Synset'][DimVocab.iloc[i]['Synset'].index(',')+1:DimVocab.iloc[i]['Synset'].rindex(',')])
+            originalsynsets.append(DimVocab.iloc[i]['Synset'][DimVocab.iloc[i]['Synset'].index(',')+1:DimVocab.iloc[i]['Synset'].rindex(',')]) 
+            originalword.append(DimVocab.iloc[i]['Synset'][DimVocab.iloc[i]['Synset'].rindex(',')+1:len(DimVocab.iloc[i]['Synset'])-1])
             vocabkey.append(DimVocab.iloc[i]['VocabKey'])
             defn.append(str(syn.definition()))
             hyprnympaths.append("<-".join(str(x)[8:-2] for x in paths))
             row_flag.append("Synset")
-    except:
-        wnsynsets.append(DimVocab.iloc[i]['Synset'])
-        vocabkey.append(DimVocab.iloc[i]['VocabKey'])
-        defn.append("No Definition")
-        hyprnympaths.append("No Hypernym Path")
-        row_flag.append("n-grams")
+    else:
+       wnsynsets.append(DimVocab.iloc[i]['Synset'][DimVocab.iloc[i]['Synset'].index(',')+1:DimVocab.iloc[i]['Synset'].rindex(',')])
+       vocabkey.append(DimVocab.iloc[i]['VocabKey'])
+       defn.append("No Definition")
+       hyprnympaths.append("No Hypernym Path")
+       row_flag.append("n-grams")
+
+
+dat = pd.DataFrame({'synset': originalsynsets,'word':originalword})
 
 StageVocabulary = pd.DataFrame({'Vocabkey':vocabkey,'Synset_OR_Word': wnsynsets,'Keyword_Flag':row_flag})
 StageSynset = pd.DataFrame({'Vocabkey':vocabkey,'Hypernym_Path':hyprnympaths, 'Definition': defn})
@@ -133,8 +144,12 @@ StageSynset = pd.DataFrame({'Vocabkey':vocabkey,'Hypernym_Path':hyprnympaths, 'D
 StageVocabularyFiltered = StageVocabulary.loc[StageVocabulary['Keyword_Flag'] == 'Synset']
 StageSynsetFinal = pd.merge(StageVocabularyFiltered, StageSynset, how='inner', on='Vocabkey')
 
+dat.drop_duplicates(inplace=True)
 StageVocabulary.drop_duplicates(inplace=True)
 StageSynsetFinal.drop_duplicates(inplace=True)
+
+dsout = RxSqlServerData(table = "UtilSynsetView", connection_string = connection_string,rows_per_read=10000)
+rx_data_step(dat,dsout,overwrite=True)
 
 dsout = RxSqlServerData(table = "StageVocabulary", connection_string = connection_string,rows_per_read=10000)
 rx_data_step(StageVocabulary,dsout,overwrite=True)
@@ -142,5 +157,11 @@ rx_data_step(StageVocabulary,dsout,overwrite=True)
 dsout = RxSqlServerData(table = "StageSynset", connection_string = connection_string,rows_per_read=10000)
 rx_data_step(StageSynsetFinal,dsout,overwrite=True)
 
+#quoted = urllib.parse.quote_plus("driver={ODBC Driver 11 for SQL Server};server=MRICZDADSAPD005;database=TextAnalytics")
+#engine = create_engine('mssql+pyodbc:///?odbc_connect={}'.format(quoted))
+
+#dat.to_sql('UtilSynsetView', schema='dbo',con = engine,if_exists='append', chunksize=1000, index=False)
+
 
 print(datetime.now() - startTime)
+
